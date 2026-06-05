@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>نظام إدارة محل صيانة وتأجير مولدات</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div id="loginView" class="login-shell">
+      <section class="login-panel">
+        <div>
+          <p class="eyebrow">نظام محل صيانة وتأجير مولدات</p>
+          <h1>تسجيل الدخول</h1>
+          <p class="muted">استخدم حساب المدير أو الموظف للدخول حسب الصلاحية.</p>
+        </div>
+        <form id="loginForm" class="form-grid">
+          <label>اسم المستخدم
+            <input name="username" required autocomplete="username" value="admin">
+          </label>
+          <label>كلمة المرور
+            <input name="password" type="password" required autocomplete="current-password" value="admin123">
+          </label>
+          <button class="primary" type="submit">دخول</button>
+          <p class="hint">المدير: admin / admin123 - الموظف: employee / 1234</p>
+        </form>
+      </section>
+    </div>
+
+    <div id="appView" class="app-shell hidden">
+      <aside class="sidebar">
+        <div class="brand">
+          <strong>إدارة المولدات</strong>
+          <span id="currentUser"></span>
+        </div>
+        <nav id="nav"></nav>
+        <button id="logoutBtn" class="ghost wide">تسجيل الخروج</button>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">لوحة العمل</p>
+            <h2 id="pageTitle">الرئيسية</h2>
+          </div>
+          <div class="search-wrap">
+            <input id="globalSearch" placeholder="بحث في العملاء والعقود والصيانة">
+          </div>
+        </header>
+        <section id="content"></section>
+      </main>
+    </div>
+
+    <template id="modalTemplate">
+      <div class="modal-backdrop">
+        <section class="modal">
+          <div class="modal-head">
+            <h3></h3>
+            <button class="icon-btn" data-close title="إغلاق">×</button>
+          </div>
+          <div class="modal-body"></div>
+        </section>
+      </div>
+    </template>
+
+    <script src="main.js"></script>
+  </body>
+</html>
