@@ -20,10 +20,10 @@ const seed = {
     { id: "e3", code: "CUS-101", name: "مولد خاص بالعميل", type: "خاص بعميل", power: "3KW", status: "تحت الصيانة", notes: "وصل مع عطل تشغيل" }
   ],
   maintenance: [
-    { id: "m1", customerId: "c2", equipmentId: "e3", fault: "لا يعمل عند التشغيل", receivedAt: today(), expectedAt: today(), status: "جاري", cost: 12000, paid: 5000, notes: "يحتاج فحص كربريتر" }
+    { id: "m1", customerId: "c2", equipmentId: "e3", fault: "لا يعمل عند التشغيل", receivedAt: today(), expectedAt: today(), status: "جاري", cost: 12000, paid: 5000, receivedBy: "موظف الاستقبال", intakeCondition: "لا يعمل", accessories: "بدون", notes: "يحتاج فحص كربريتر" }
   ],
   rentals: [
-    { id: "r1", customerId: "c1", equipmentId: "e2", startAt: today(), endAt: today(), returnedAt: "", status: "نشط", rentTotal: 20000, paid: 10000, depositType: "بطاقة شخصية", depositValue: 0, depositReceivedBy: "موظف الاستقبال", depositReturnedBy: "", oilCondition: true, misuseCondition: true, notes: "تم توضيح شروط سوء الاستخدام" }
+    { id: "r1", customerId: "c1", equipmentId: "e2", startAt: today(), endAt: today(), returnedAt: "", returnCondition: "", receivedBy: "", status: "نشط", rentTotal: 20000, paid: 10000, depositType: "بطاقة شخصية", depositValue: 0, depositReceivedBy: "موظف الاستقبال", depositReturnedBy: "", oilCondition: true, misuseCondition: true, notes: "تم توضيح شروط سوء الاستخدام" }
   ],
   payments: [
     { id: "p1", date: today(), targetType: "إيجار", targetId: "r1", amount: 10000, method: "نقد", notes: "دفعة أولى" },
@@ -134,6 +134,54 @@ function renderPage() {
   wireActions(content);
 }
 
+function asNumber(value) {
+  return Number(value || 0);
+}
+
+function fail(message) {
+  alert(message);
+  return false;
+}
+
+function validateRequired(data, labels) {
+  for (const [key, label] of Object.entries(labels)) {
+    if (!String(data[key] ?? "").trim()) return fail(`حقل ${label} مطلوب`);
+  }
+  return true;
+}
+
+function validatePhone(phone) {
+  if (!/^[0-9+\-\s]{7,15}$/.test(String(phone || "").trim())) {
+    return fail("رقم الجوال غير صحيح");
+  }
+  return true;
+}
+
+function validateMoney(data, keys) {
+  for (const key of keys) {
+    if (asNumber(data[key]) < 0) return fail("المبالغ يجب أن تكون صفر أو أكثر");
+  }
+  return true;
+}
+
+function validateDateOrder(start, end, message) {
+  if (start && end && start > end) return fail(message);
+  return true;
+}
+
+function validatePaid(total, paid) {
+  if (asNumber(paid) > asNumber(total)) return fail("المدفوع لا يمكن أن يكون أكبر من الإجمالي");
+  return true;
+}
+
+function refreshEquipmentStatus(equipmentId) {
+  const equipment = byId("equipment", equipmentId);
+  if (!equipment) return;
+  const rented = db.rentals.some((r) => r.equipmentId === equipmentId && !["مكتمل", "ملغي"].includes(r.status));
+  const inMaintenance = db.maintenance.some((m) => m.equipmentId === equipmentId && !["تم التسليم", "ملغي"].includes(m.status));
+  equipment.status = rented ? "مؤجر" : inMaintenance ? "تحت الصيانة" : "متوفر";
+}
+
 function dashboard() {
   const activeRentals = db.rentals.filter((r) => r.status === "نشط");
   const overdue = activeRentals.filter((r) => r.endAt < today());
@@ -179,18 +227,18 @@ function maintenance() {
   const rows = filtered(db.maintenance, ["fault", "status", "notes"]).map((m) => [
     m.id, customerName(m.customerId), equipmentName(m.equipmentId), m.fault, m.receivedAt, m.expectedAt,
     statusBadge(m.status), money(m.cost), money(Number(m.cost) - Number(m.paid || 0)),
-    actions(`<button class="secondary" data-edit-maintenance="${m.id}">تعديل</button><button class="secondary" data-print-maintenance="${m.id}">فاتورة</button><button class="danger" data-delete="maintenance:${m.id}">حذف</button>`)
+    actions(`<button class="secondary" data-edit-maintenance="${m.id}">تعديل</button><button class="secondary" data-print-maintenance="${m.id}">فاتورة</button>${m.status !== "تم التسليم" ? `<button class="secondary" data-deliver-maintenance="${m.id}">تسليم</button>` : ""}<button class="danger" data-delete="maintenance:${m.id}">حذف</button>`)
   ]);
-  return section("طلبات الصيانة", `<button class="primary" data-add-maintenance>طلب صيانة</button>`, tableHtml(["رقم", "العميل", "المعدة", "العطل", "الاستلام", "التسليم المتوقع", "الحالة", "التكلفة", "المتبقي", "إجراء"], rows));
+  return section("طلبات الصيانة", `<button class="primary" data-add-maintenance>استلام معدة للصيانة</button>`, tableHtml(["رقم", "العميل", "المعدة", "العطل", "الاستلام", "التسليم المتوقع", "الحالة", "التكلفة", "المتبقي", "إجراء"], rows));
 }
 
 function rentals() {
   const rows = filtered(db.rentals, ["status", "depositType", "notes"]).map((r) => [
     r.id, customerName(r.customerId), equipmentName(r.equipmentId), r.startAt, r.endAt,
-    statusBadge(r.status), r.depositType, money(r.rentTotal), money(Number(r.rentTotal) - Number(r.paid || 0)),
-    actions(`<button class="secondary" data-edit-rental="${r.id}">تعديل</button><button class="secondary" data-print-rental="${r.id}">عقد</button><button class="danger" data-delete="rentals:${r.id}">حذف</button>`)
+    r.returnedAt || "-", statusBadge(r.status), r.depositType, money(r.rentTotal), money(Number(r.rentTotal) - Number(r.paid || 0)),
+    actions(`<button class="secondary" data-edit-rental="${r.id}">تعديل</button>${r.status !== "مكتمل" && r.status !== "ملغي" ? `<button class="secondary" data-receive-rental="${r.id}">استلام</button>` : ""}<button class="secondary" data-print-rental="${r.id}">عقد</button><button class="danger" data-delete="rentals:${r.id}">حذف</button>`)
   ]);
-  return section("عقود التأجير", `<button class="primary" data-add-rental>عقد تأجير</button>`, tableHtml(["رقم", "المستأجر", "المعدة", "البداية", "النهاية", "الحالة", "الرهن", "الإجمالي", "المتبقي", "إجراء"], rows));
+  return section("عقود التأجير", `<button class="primary" data-add-rental>عقد تأجير</button>`, tableHtml(["رقم", "المستأجر", "المعدة", "البداية", "النهاية", "تاريخ الاستلام", "الحالة", "الرهن", "الإجمالي", "المتبقي", "إجراء"], rows));
 }
 
 function payments() {
@@ -280,8 +328,10 @@ function wireActions(root) {
   root.querySelectorAll("[data-edit-equipment]").forEach((b) => b.onclick = () => equipmentForm(byId("equipment", b.dataset.editEquipment)));
   root.querySelectorAll("[data-add-maintenance]").forEach((b) => b.onclick = () => maintenanceForm());
   root.querySelectorAll("[data-edit-maintenance]").forEach((b) => b.onclick = () => maintenanceForm(byId("maintenance", b.dataset.editMaintenance)));
+  root.querySelectorAll("[data-deliver-maintenance]").forEach((b) => b.onclick = () => deliverMaintenanceForm(byId("maintenance", b.dataset.deliverMaintenance)));
   root.querySelectorAll("[data-add-rental]").forEach((b) => b.onclick = () => rentalForm());
   root.querySelectorAll("[data-edit-rental]").forEach((b) => b.onclick = () => rentalForm(byId("rentals", b.dataset.editRental)));
+  root.querySelectorAll("[data-receive-rental]").forEach((b) => b.onclick = () => receiveRentalForm(byId("rentals", b.dataset.receiveRental)));
   root.querySelectorAll("[data-add-payment]").forEach((b) => b.onclick = () => paymentForm());
   root.querySelectorAll("[data-add-user]").forEach((b) => b.onclick = () => userForm());
   root.querySelectorAll("[data-edit-user]").forEach((b) => b.onclick = () => userForm(byId("users", b.dataset.editUser)));
@@ -304,7 +354,8 @@ function openModal(title, bodyHtml, onSubmit) {
   if (form) {
     form.onsubmit = (event) => {
       event.preventDefault();
-      onSubmit(new FormData(form));
+      const ok = onSubmit(new FormData(form));
+      if (ok === false) return;
       backdrop.remove();
       save();
       renderPage();
@@ -333,7 +384,11 @@ function customerForm(item = {}) {
       ${input("address", "العنوان", item.address || "")}
       ${textarea("notes", "ملاحظات", item.notes || "")}
       <button class="primary span-2">حفظ</button>
-    </form>`, (fd) => upsert("customers", item.id, Object.fromEntries(fd)));
+    </form>`, (fd) => {
+      const data = Object.fromEntries(fd);
+      if (!validateRequired(data, { name: "اسم العميل", phone: "رقم الجوال" }) || !validatePhone(data.phone)) return false;
+      upsert("customers", item.id, data);
+    });
 }
 
 function equipmentForm(item = {}) {
@@ -346,11 +401,17 @@ function equipmentForm(item = {}) {
       ${select("status", "الحالة", ["متوفر", "مؤجر", "تحت الصيانة"], item.status || "متوفر")}
       ${textarea("notes", "ملاحظات", item.notes || "")}
       <button class="primary span-2">حفظ</button>
-    </form>`, (fd) => upsert("equipment", item.id, Object.fromEntries(fd)));
+    </form>`, (fd) => {
+      const data = Object.fromEntries(fd);
+      if (!validateRequired(data, { code: "كود المعدة", name: "اسم المعدة" })) return false;
+      const duplicate = db.equipment.some((e) => e.code === data.code && e.id !== item.id);
+      if (duplicate) return fail("كود المعدة مستخدم من قبل");
+      upsert("equipment", item.id, data);
+    });
 }
 
 function maintenanceForm(item = {}) {
-  openModal(item.id ? "تعديل طلب صيانة" : "طلب صيانة جديد", `
+  openModal(item.id ? "تعديل طلب صيانة" : "استلام معدة للصيانة", `
     <form class="form-grid">
       <label>العميل<select name="customerId" required>${options(db.customers, item.customerId, (c) => `${c.name} - ${c.phone}`)}</select></label>
       <label>المعدة<select name="equipmentId" required>${options(db.equipment, item.equipmentId, (e) => `${e.code} - ${e.name}`)}</select></label>
@@ -360,21 +421,29 @@ function maintenanceForm(item = {}) {
       ${select("status", "الحالة", ["جاري", "تم", "تم التسليم", "ملغي"], item.status || "جاري")}
       ${input("cost", "تكلفة الصيانة", item.cost || 0, "number")}
       ${input("paid", "المدفوع", item.paid || 0, "number")}
+      ${input("receivedBy", "مستلم المعدة", item.receivedBy || currentUserName())}
+      ${input("intakeCondition", "حالة المعدة عند الاستلام", item.intakeCondition || "")}
+      ${input("accessories", "الملحقات المستلمة", item.accessories || "")}
       ${textarea("notes", "ملاحظات الأعطال", item.notes || "")}
       <button class="primary span-2">حفظ</button>
     </form>`, (fd) => {
       const data = Object.fromEntries(fd);
+      if (!validateRequired(data, { customerId: "العميل", equipmentId: "المعدة", fault: "نوع العطل", receivedAt: "تاريخ الاستلام", expectedAt: "التسليم المتوقع", receivedBy: "مستلم المعدة" })) return false;
+      if (!validateDateOrder(data.receivedAt, data.expectedAt, "تاريخ التسليم المتوقع يجب أن يكون بعد تاريخ الاستلام")) return false;
+      if (!validateMoney(data, ["cost", "paid"]) || !validatePaid(data.cost, data.paid)) return false;
+      const previousEquipmentId = item.equipmentId;
       upsert("maintenance", item.id, data);
-      const equipment = byId("equipment", data.equipmentId);
-      if (equipment) equipment.status = data.status === "تم التسليم" ? "متوفر" : "تحت الصيانة";
+      refreshEquipmentStatus(data.equipmentId);
+      if (previousEquipmentId && previousEquipmentId !== data.equipmentId) refreshEquipmentStatus(previousEquipmentId);
     });
 }
 
 function rentalForm(item = {}) {
+  const equipmentChoices = item.id ? db.equipment : db.equipment.filter((e) => e.status === "متوفر");
   openModal(item.id ? "تعديل عقد تأجير" : "عقد تأجير جديد", `
     <form class="form-grid">
       <label>المستأجر<select name="customerId" required>${options(db.customers, item.customerId, (c) => `${c.name} - ${c.phone}`)}</select></label>
-      <label>المعدة<select name="equipmentId" required>${options(db.equipment, item.equipmentId, (e) => `${e.code} - ${e.name} - ${e.status}`)}</select></label>
+      <label>المعدة<select name="equipmentId" required>${options(equipmentChoices, item.equipmentId, (e) => `${e.code} - ${e.name} - ${e.status}`)}</select></label>
       ${input("startAt", "تاريخ البداية", item.startAt || today(), "date")}
       ${input("endAt", "تاريخ الإرجاع", item.endAt || today(), "date")}
       ${select("status", "الحالة", ["نشط", "مكتمل", "متأخر", "ملغي"], item.status || "نشط")}
@@ -390,11 +459,84 @@ function rentalForm(item = {}) {
       <button class="primary span-2">حفظ</button>
     </form>`, (fd) => {
       const data = Object.fromEntries(fd);
+      if (!data.equipmentId) return fail("لا توجد معدات متوفرة للتأجير");
+      if (!validateRequired(data, { customerId: "المستأجر", equipmentId: "المعدة", startAt: "تاريخ البداية", endAt: "تاريخ الإرجاع" })) return false;
+      if (!validateDateOrder(data.startAt, data.endAt, "تاريخ الإرجاع يجب أن يكون بعد تاريخ البداية")) return false;
+      if (!validateMoney(data, ["rentTotal", "paid", "depositValue"]) || !validatePaid(data.rentTotal, data.paid)) return false;
+      const equipment = byId("equipment", data.equipmentId);
+      if (!item.id && equipment?.status !== "متوفر") return fail("لا يمكن تأجير معدة غير متوفرة");
+      const previousEquipmentId = item.equipmentId;
       data.oilCondition = fd.has("oilCondition");
       data.misuseCondition = fd.has("misuseCondition");
       upsert("rentals", item.id, data);
-      const equipment = byId("equipment", data.equipmentId);
-      if (equipment) equipment.status = data.status === "مكتمل" || data.status === "ملغي" ? "متوفر" : "مؤجر";
+      refreshEquipmentStatus(data.equipmentId);
+      if (previousEquipmentId && previousEquipmentId !== data.equipmentId) refreshEquipmentStatus(previousEquipmentId);
+    });
+}
+
+function receiveRentalForm(item) {
+  openModal("استلام معدة مؤجرة", `
+    <form class="form-grid">
+      ${input("returnedAt", "تاريخ الاستلام", item.returnedAt || today(), "date", "required")}
+      ${input("receivedBy", "مستلم المعدة", item.receivedBy || currentUserName(), "text", "required")}
+      ${input("returnCondition", "حالة المعدة عند الرجوع", item.returnCondition || "سليمة", "text", "required")}
+      ${input("depositReturnedBy", "مسلم الرهن", item.depositReturnedBy || currentUserName())}
+      ${input("extraCost", "تكلفة إضافية/أضرار", 0, "number")}
+      ${input("paidNow", "مبلغ مستلم الآن", Math.max(0, Number(item.rentTotal) - Number(item.paid || 0)), "number")}
+      ${textarea("notes", "ملاحظات الاستلام", item.notes || "")}
+      <button class="primary span-2">تأكيد الاستلام</button>
+    </form>`, (fd) => {
+      const data = Object.fromEntries(fd);
+      if (!validateRequired(data, { returnedAt: "تاريخ الاستلام", receivedBy: "مستلم المعدة", returnCondition: "حالة المعدة" })) return false;
+      if (!validateDateOrder(item.startAt, data.returnedAt, "تاريخ الاستلام يجب أن يكون بعد تاريخ بداية العقد")) return false;
+      if (!validateMoney(data, ["extraCost", "paidNow"])) return false;
+      const extraCost = asNumber(data.extraCost);
+      const paidNow = asNumber(data.paidNow);
+      const newTotal = asNumber(item.rentTotal) + extraCost;
+      if (asNumber(item.paid) + paidNow > newTotal) return fail("المبلغ المستلم أكبر من المتبقي");
+      Object.assign(item, {
+        returnedAt: data.returnedAt,
+        receivedBy: data.receivedBy,
+        returnCondition: data.returnCondition,
+        depositReturnedBy: data.depositReturnedBy,
+        rentTotal: newTotal,
+        paid: asNumber(item.paid) + paidNow,
+        status: "مكتمل",
+        notes: data.notes
+      });
+      if (paidNow > 0) {
+        db.payments.unshift({ id: uid("p"), date: data.returnedAt, targetType: "إيجار", targetId: item.id, amount: paidNow, method: "نقد", notes: "دفعة عند استلام المعدة المؤجرة" });
+      }
+      refreshEquipmentStatus(item.equipmentId);
+    });
+}
+
+function deliverMaintenanceForm(item) {
+  openModal("تسليم معدة الصيانة للعميل", `
+    <form class="form-grid">
+      ${input("deliveredAt", "تاريخ التسليم", item.deliveredAt || today(), "date", "required")}
+      ${input("deliveredBy", "مسلم المعدة", item.deliveredBy || currentUserName(), "text", "required")}
+      ${input("paidNow", "مبلغ مستلم الآن", Math.max(0, Number(item.cost) - Number(item.paid || 0)), "number")}
+      ${textarea("notes", "ملاحظات التسليم", item.notes || "")}
+      <button class="primary span-2">تأكيد التسليم</button>
+    </form>`, (fd) => {
+      const data = Object.fromEntries(fd);
+      if (!validateRequired(data, { deliveredAt: "تاريخ التسليم", deliveredBy: "مسلم المعدة" })) return false;
+      if (!validateDateOrder(item.receivedAt, data.deliveredAt, "تاريخ التسليم يجب أن يكون بعد تاريخ الاستلام")) return false;
+      if (!validateMoney(data, ["paidNow"])) return false;
+      const paidNow = asNumber(data.paidNow);
+      if (asNumber(item.paid) + paidNow > asNumber(item.cost)) return fail("المبلغ المستلم أكبر من المتبقي");
+      Object.assign(item, {
+        deliveredAt: data.deliveredAt,
+        deliveredBy: data.deliveredBy,
+        paid: asNumber(item.paid) + paidNow,
+        status: "تم التسليم",
+        notes: data.notes
+      });
+      if (paidNow > 0) {
+        db.payments.unshift({ id: uid("p"), date: data.deliveredAt, targetType: "صيانة", targetId: item.id, amount: paidNow, method: "نقد", notes: "دفعة عند تسليم معدة الصيانة" });
+      }
+      refreshEquipmentStatus(item.equipmentId);
     });
 }
 
@@ -414,9 +556,12 @@ function paymentForm() {
     </form>`, (fd) => {
       const [targetType, targetId] = fd.get("ref").split("|");
       const amount = Number(fd.get("amount"));
-      db.payments.unshift({ id: uid("p"), date: fd.get("date"), targetType, targetId, amount, method: fd.get("method"), notes: fd.get("notes") });
+      if (amount <= 0) return fail("مبلغ الدفعة يجب أن يكون أكبر من صفر");
       const collection = targetType === "إيجار" ? "rentals" : "maintenance";
       const target = byId(collection, targetId);
+      const total = targetType === "إيجار" ? target?.rentTotal : target?.cost;
+      if (target && Number(target.paid || 0) + amount > Number(total || 0)) return fail("الدفعة أكبر من المبلغ المتبقي");
+      db.payments.unshift({ id: uid("p"), date: fd.get("date"), targetType, targetId, amount, method: fd.get("method"), notes: fd.get("notes") });
       if (target) target.paid = Number(target.paid || 0) + amount;
     });
 }
@@ -432,9 +577,16 @@ function userForm(item = {}) {
       <button class="primary span-2">حفظ</button>
     </form>`, (fd) => {
       const data = Object.fromEntries(fd);
+      if (!validateRequired(data, { name: "الاسم", username: "اسم المستخدم", password: "كلمة المرور" })) return false;
+      const duplicate = db.users.some((u) => u.username === data.username && u.id !== item.id);
+      if (duplicate) return fail("اسم المستخدم مستخدم من قبل");
       data.active = data.active === "نشط";
       upsert("users", item.id, data);
     });
+}
+
+function currentUserName() {
+  return byId("users", db.session?.userId)?.name || "";
 }
 
 function upsert(collection, id, data) {
@@ -451,8 +603,26 @@ function upsert(collection, id, data) {
 
 function deleteItem(ref) {
   const [collection, id] = ref.split(":");
+  if (collection === "customers" && (db.rentals.some((r) => r.customerId === id) || db.maintenance.some((m) => m.customerId === id))) {
+    alert("لا يمكن حذف عميل مرتبط بعقود أو طلبات صيانة");
+    return;
+  }
+  if (collection === "equipment" && (db.rentals.some((r) => r.equipmentId === id) || db.maintenance.some((m) => m.equipmentId === id))) {
+    alert("لا يمكن حذف معدة مرتبطة بعقد أو طلب صيانة");
+    return;
+  }
+  if (collection === "users" && db.session?.userId === id) {
+    alert("لا يمكن حذف المستخدم الحالي");
+    return;
+  }
   if (!confirm("هل تريد حذف هذا السجل؟")) return;
+  const deleted = db[collection].find((item) => item.id === id);
   db[collection] = db[collection].filter((item) => item.id !== id);
+  if (deleted?.equipmentId && ["rentals", "maintenance"].includes(collection)) refreshEquipmentStatus(deleted.equipmentId);
+  if (collection === "payments" && deleted) {
+    const target = byId(deleted.targetType === "إيجار" ? "rentals" : "maintenance", deleted.targetId);
+    if (target) target.paid = Math.max(0, Number(target.paid || 0) - Number(deleted.amount || 0));
+  }
   save();
   renderPage();
 }
@@ -467,6 +637,9 @@ function printMaintenance(item) {
     ["المدفوع", money(item.paid)],
     ["المتبقي", money(Number(item.cost) - Number(item.paid || 0))],
     ["الحالة", item.status],
+    ["مستلم المعدة", item.receivedBy || "-"],
+    ["حالة الاستلام", item.intakeCondition || "-"],
+    ["الملحقات", item.accessories || "-"],
     ["ملاحظات", item.notes || "-"]
   ]), () => {});
 }
@@ -481,6 +654,9 @@ function printRental(item) {
     ["المدفوع", money(item.paid)],
     ["المتبقي", money(Number(item.rentTotal) - Number(item.paid || 0))],
     ["الرهن", `${item.depositType || "-"} ${Number(item.depositValue || 0) ? money(item.depositValue) : ""}`],
+    ["تاريخ الاستلام", item.returnedAt || "-"],
+    ["مستلم المعدة", item.receivedBy || "-"],
+    ["حالة الرجوع", item.returnCondition || "-"],
     ["الشروط", `${item.oilCondition ? "تغيير الزيت عند طول المدة. " : ""}${item.misuseCondition ? "تحمل أعطال سوء الاستخدام." : ""}`],
     ["ملاحظات", item.notes || "-"]
   ]), () => {});

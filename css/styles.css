@@ -157,7 +157,7 @@ label { display: grid; gap: 6px; font-weight: 650; font-size: 14px; }
 }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
-.table-panel { overflow: hidden; }
+.table-panel { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; background: #fff; }
 th, td {
   padding: 12px;
