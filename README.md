@@ -1,1 +1,11 @@
-Web-based system for managing generator maintenance, equipment rentals, customers, payments, returns, and reports.
+# Maintenance Rental Shop System
+
+## فكرة المشروع
+نظام ويب لإدارة محل صيانة وتأجير المعدات والمولدات. يساعد على تسجيل العملاء، إدارة المعدات، إنشاء عقود التأجير، استلام المعدات المؤجرة، استلام المعدات للصيانة، تسجيل الدفعات، متابعة حالة المعدات، وطباعة العقود والفواتير والتقارير.
+
+## الأدوات المستخدمة
+- HTML
+- CSS
+- JavaScript
+- LocalStorage لحفظ البيانات داخل المتصفح
+- Git / GitHub لإدارة المشروع
